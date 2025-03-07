@@ -1,5 +1,4 @@
 from torch import nn
-
 import torch
 import torch.nn.functional as F
 
@@ -17,7 +16,37 @@ class SRCNN(nn.Module):
         x = self.relu(self.conv2(x))
         x = self.conv3(x)
         return x
+
+class FusionSR(nn.Module):
+    def __init__(self, num_channels=1, dim=64, num_heads=8, num_blocks=6, ff_dim=256):
+        super(FusionSR, self).__init__()
+
+        self.transSR = TransformerSRCNN(num_channels, dim, num_heads, num_blocks, ff_dim)
+
+        self.cnnSR = CNNSR(num_channels=num_channels)
+
+    def forward(self, x):
+        
+        x1 = self.transSR(x)
+        x2 = self.cnnSR(x)
+
+        return x1 + x2
+
     
+class CNNSR(nn.Module):
+    def __init__(self, num_channels=1):
+        super(CNNSR, self).__init__()
+        self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=9, padding=9 // 2)
+        self.conv2 = nn.Conv2d(64, 32, kernel_size=5, padding=5 // 2)
+        self.conv3 = nn.Conv2d(32, num_channels, kernel_size=5, padding=5 // 2)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv2(x))
+        x = self.conv3(x)
+        return x
+
 
 class TransformerSRCNN(nn.Module):
     def __init__(self, num_channels=1, dim=64, num_heads=8, num_blocks=6, ff_dim=256):
@@ -44,8 +73,10 @@ class TransformerSRCNN(nn.Module):
         x = x.flatten(2).transpose(1, 2)  # 将形状变为 [batch_size, height*width, dim]
         
         # Step 2: Transformer blocks
+        x_t = x
         for block in self.blocks:
-            x = block(x)
+            x_t = block(x_t)
+        x = x + x_t
         
         # Step 3: Reverse flattening to reconstruct the feature map
         x = x.transpose(1, 2).reshape(batch_size, dim, height, width)
