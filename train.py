@@ -8,10 +8,13 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
+import torch.nn.functional as F
 
-from models import SRCNN
+from models import SRCNN, TransformerSRCNN
 from datasets import TrainDataset, EvalDataset
 from utils import AverageMeter, calc_psnr
+from SwinIR.models.network_swinir import SwinIR
+
 
 
 if __name__ == '__main__':
@@ -37,12 +40,20 @@ if __name__ == '__main__':
 
     torch.manual_seed(args.seed)
 
-    model = SRCNN().to(device)
+    # model = SRCNN().to(device)
+    # criterion = nn.MSELoss()
+    # optimizer = optim.Adam([
+    #     {'params': model.conv1.parameters()},
+    #     {'params': model.conv2.parameters()},
+    #     {'params': model.conv3.parameters(), 'lr': args.lr * 0.1}
+    # ], lr=args.lr)
+    # 使用 TransformerSRCNN 替代原始 SRCNN
+    model = TransformerSRCNN(num_channels=1, dim=64, num_heads=8, num_blocks=6, ff_dim=256).to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam([
-        {'params': model.conv1.parameters()},
-        {'params': model.conv2.parameters()},
-        {'params': model.conv3.parameters(), 'lr': args.lr * 0.1}
+        {'params': model.patch_embed.parameters()},
+        {'params': model.blocks.parameters()},
+        {'params': model.final_conv.parameters(), 'lr': args.lr * 0.1}
     ], lr=args.lr)
 
     train_dataset = TrainDataset(args.train_file)
@@ -110,3 +121,4 @@ if __name__ == '__main__':
 
     print('best epoch: {}, psnr: {:.2f}'.format(best_epoch, best_psnr))
     torch.save(best_weights, os.path.join(args.outputs_dir, 'best.pth'))
+
