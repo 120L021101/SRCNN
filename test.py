@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 import numpy as np
 import PIL.Image as pil_image
 
-from models import SRCNN
+from models import SRCNN, ResSR
 from utils import convert_rgb_to_ycbcr, convert_ycbcr_to_rgb, calc_psnr
 
 
@@ -20,6 +20,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     model = SRCNN().to(device)
+    #model = ResSR().to(device)
 
     state_dict = model.state_dict()
     for n, p in torch.load(args.weights_file, map_location=lambda storage, loc: storage).items():
