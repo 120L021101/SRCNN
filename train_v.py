@@ -8,14 +8,12 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
-import torch.nn.functional as F
 
-from models import SRCNN, TransformerSRCNN, FusionSR
+from models import SRCNN, TransformerSRCNN, Discriminator
 from datasets import TrainDataset, EvalDataset
 from utils import AverageMeter, calc_psnr
-# from SwinIR.models.network_swinir import SwinIR
 
-
+import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -40,27 +38,19 @@ if __name__ == '__main__':
 
     torch.manual_seed(args.seed)
 
-    # model = SRCNN().to(device)
-    # criterion = nn.MSELoss()
-    # optimizer = optim.Adam([
-    #     {'params': model.conv1.parameters()},
-    #     {'params': model.conv2.parameters()},
-    #     {'params': model.conv3.parameters(), 'lr': args.lr * 0.1}
-    # ], lr=args.lr)
-
-    # 使用 TransformerSRCNN 替代原始 SRCNN, 不要删此处代码
-    # model = TransformerSRCNN(num_channels=1, dim=64, num_heads=8, num_blocks=6, ff_dim=256).to(device)
-    model = FusionSR(num_channels=1, dim=64, num_heads=4, num_blocks=2, ff_dim=64).to(device)
+    model = SRCNN().to(device)
+    #model = TransformerSRCNN(num_channels=1, dim=64, num_heads=8, num_blocks=6, ff_dim=256).to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam([
-        {'params': model.transSR.parameters()},
-        {'params': model.cnnSR.parameters()},
-        
-        # {'params': model.patch_embed.parameters()},
-        # {'params': model.blocks.parameters()},
-        # {'params': model.final_conv1.parameters(), 'lr': args.lr * 0.1},
-        # {'params': model.final_conv2.parameters(), 'lr': args.lr * 0.1}
+        {'params': model.conv1.parameters()},
+        {'params': model.conv2.parameters()},
+        {'params': model.conv3.parameters(), 'lr': args.lr * 0.1}
     ], lr=args.lr)
+    # optimizer = optim.Adam([
+    #     {'params': model.patch_embed.parameters()},
+    #     {'params': model.blocks.parameters()},
+    #     {'params': model.final_conv.parameters(), 'lr': args.lr * 0.1}
+    # ], lr=args.lr)
 
     train_dataset = TrainDataset(args.train_file)
     train_dataloader = DataLoader(dataset=train_dataset,
@@ -75,6 +65,9 @@ if __name__ == '__main__':
     best_weights = copy.deepcopy(model.state_dict())
     best_epoch = 0
     best_psnr = 0.0
+
+    loss_list = []
+    psnr_list = []
 
     for epoch in range(args.num_epochs):
         model.train()
@@ -119,6 +112,8 @@ if __name__ == '__main__':
             epoch_psnr.update(calc_psnr(preds, labels), len(inputs))
 
         print('eval psnr: {:.2f}'.format(epoch_psnr.avg))
+        loss_list.append(float(epoch_losses.avg))
+        psnr_list.append(float(epoch_psnr.avg))
 
         if epoch_psnr.avg > best_psnr:
             best_epoch = epoch
@@ -128,3 +123,21 @@ if __name__ == '__main__':
     print('best epoch: {}, psnr: {:.2f}'.format(best_epoch, best_psnr))
     torch.save(best_weights, os.path.join(args.outputs_dir, 'best.pth'))
 
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(range(args.num_epochs), loss_list, marker='o', markevery=9)
+    plt.title("Training Loss per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+
+    plt.subplot(1, 2, 2)
+    plt.plot(range(args.num_epochs), psnr_list, marker='o', markevery=9, color='green')
+    plt.title("Eval PSNR per Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("PSNR")
+
+    plt.tight_layout()
+    plot_path = os.path.join(args.outputs_dir, 'loss_psnr.png')
+    plt.savefig(plot_path)
+    plt.close()
